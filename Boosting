@@ -1,1 +1,82 @@
+pip install ucimlrepo
 
+from ucimlrepo import fetch_ucirepo 
+  
+# fetch dataset 
+spambase = fetch_ucirepo(id=94) 
+  
+# data (as pandas dataframes) 
+X = spambase.data.features 
+y = spambase.data.targets 
+  
+# metadata 
+print(spambase.metadata) 
+  
+# variable information 
+print(spambase.variables)
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.utils import shuffle
+
+# Load the dataset
+# You will need to replace 'path_to_data' with the actual path to your downloaded dataset file.
+# You should have the dataset file named as 'spambase_shuffled.csv'.
+data = np.loadtxt('path_to_data/spambase_shuffled.csv', delimiter=',')
+
+# Separate features and labels
+X = data[:, :-1]
+y = data[:, -1]
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=1151, train_size=3450, shuffle=False)
+
+# Standardize the features using training data
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# Number of boosting rounds to try
+rounds_to_try = [10, 102, 1000]
+
+# Perform 10-fold cross-validation for each number of rounds
+cv_errors = []
+for T in rounds_to_try:
+    clf = AdaBoostClassifier(base_estimator=DecisionTreeClassifier(max_depth=1), n_estimators=T)
+    scores = cross_val_score(clf, X_train_scaled, y_train, cv=10, scoring='accuracy')
+    cv_errors.append(1 - np.mean(scores))
+
+# Plot average cross-validation error
+plt.errorbar(rounds_to_try, cv_errors, yerr=np.std(scores), fmt='o-', label='Cross-validation error')
+plt.xlabel('Number of Rounds (T)')
+plt.ylabel('Error')
+plt.title('Cross-validation Error vs Number of Rounds')
+plt.legend()
+plt.show()
+
+# Find the best number of rounds based on cross-validation error
+best_rounds = rounds_to_try[np.argmin(cv_errors)]
+
+# Train AdaBoost with the best number of rounds on the full training set
+best_clf = AdaBoostClassifier(base_estimator=DecisionTreeClassifier(max_depth=1), n_estimators=best_rounds)
+best_clf.fit(X_train_scaled, y_train)
+
+# Plot error on the training set
+train_errors = [1 - accuracy for accuracy in best_clf.staged_score(X_train_scaled, y_train)]
+plt.plot(range(1, best_rounds + 1), train_errors, label='Training Error')
+
+# Plot error on the test set
+test_errors = [1 - accuracy for accuracy in best_clf.staged_score(X_test_scaled, y_test)]
+plt.plot(range(1, best_rounds + 1), test_errors, label='Test Error')
+
+plt.xlabel('Number of Rounds (t)')
+plt.ylabel('Error')
+plt.title('Training and Test Error vs Number of Rounds')
+plt.legend()
+plt.show()
